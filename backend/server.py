@@ -452,12 +452,8 @@ async def exportar_excel(relatorio_id: str, user=Depends(get_current_user)):
         ws.cell(row=i, column=5, value=p.get('corte_agua_pct', 0))
         ws.cell(row=i, column=6, value=p.get('pressao_psi', 0))
 
-    for col_cells in ws.columns:
-        max_length = 0
-        for cell in col_cells:
-            if cell.value:
-                max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col_cells[0].column_letter].width = min(max_length + 2, 30)
+    for col_letter, width in [('A', 22), ('B', 14), ('C', 14), ('D', 14), ('E', 14), ('F', 14)]:
+        ws.column_dimensions[col_letter].width = width
 
     buffer = io.BytesIO()
     wb.save(buffer)
