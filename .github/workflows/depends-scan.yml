@@ -1,0 +1,115 @@
+name: Depends Security Scan
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trivy Vulnerability Scan (Table)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'vuln'
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Trivy Vulnerability Scan (JSON)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'vuln'
+          format: 'json'
+          output: 'trivy-deps-results.json'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Trivy License Scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'license'
+          format: 'table'
+
+      - name: Trivy IaC Scan (JSON)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-iac-results.json'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+
+      - name: Send results to Depends
+        if: always()
+        run: |
+          echo '{}' > merged-results.json
+          if [ -f trivy-deps-results.json ]; then
+            jq -s '.[0] * {Results: (.[0].Results // []) + (.[1].Results // [])}' merged-results.json trivy-deps-results.json > temp.json && mv temp.json merged-results.json
+          fi
+          if [ -f trivy-iac-results.json ]; then
+            jq -s '.[0] * {Results: (.[0].Results // []) + (.[1].Results // [])}' merged-results.json trivy-iac-results.json > temp.json && mv temp.json merged-results.json
+          fi
+          curl -X POST "https://trivy-github-scanner.emergent.host/api/webhook/scan" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg project_id "proj_1033d53a8b3e" \
+              --arg webhook_secret "8aab341e34eb405da1a914337a3221d9" \
+              --arg commit_sha "${{ github.sha }}" \
+              --arg branch "${{ github.ref_name }}" \
+              --arg scan_type "all" \
+              --slurpfile results merged-results.json \
+              '{
+                project_id: $project_id,
+                webhook_secret: $webhook_secret,
+                commit_sha: $commit_sha,
+                branch: $branch,
+                scan_type: $scan_type,
+                trivy_results: $results[0],
+                status: "completed"
+              }')"
+
+      - name: Vulnerability Summary
+        if: always()
+        run: |
+          echo "============================================"
+          echo "  SIGEP SCA SCAN SUMMARY"
+          echo "============================================"
+          if [ -f merged-results.json ]; then
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' merged-results.json 2>/dev/null || echo 0)
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' merged-results.json 2>/dev/null || echo 0)
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' merged-results.json 2>/dev/null || echo 0)
+            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' merged-results.json 2>/dev/null || echo 0)
+            TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
+            echo "  CRITICAL: $CRITICAL"
+            echo "  HIGH:     $HIGH"
+            echo "  MEDIUM:   $MEDIUM"
+            echo "  LOW:      $LOW"
+            echo "  TOTAL:    $TOTAL"
+          fi
+          echo "============================================"
+          echo "  Dashboard: https://trivy-github-scanner.emergent.host/dashboard"
+          echo "============================================"
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sigep-sca-results
+          path: |
+            trivy-deps-results.json
+            trivy-iac-results.json
+            merged-results.json
+          retention-days: 30

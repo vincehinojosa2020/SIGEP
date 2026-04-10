@@ -2,7 +2,7 @@
   "name": "sigep-legacy-frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "SIGEP Legacy Frontend - DO NOT UPDATE - Intentionally vulnerable for SCA demo",
+  "description": "SIGEP Legacy Frontend - Intentionally vulnerable for SCA demo",
   "dependencies": {
     "lodash": "4.17.19",
     "axios": "0.21.1",

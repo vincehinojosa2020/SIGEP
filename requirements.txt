@@ -1,4 +1,4 @@
-# SIGEP Legacy Dependencies - DO NOT UPDATE - Intentionally vulnerable for SCA demo
+# SIGEP Legacy Dependencies - Intentionally pinned for SCA scanning demo
 Django==2.2.28
 djangorestframework==3.11.2
 requests==2.25.1
